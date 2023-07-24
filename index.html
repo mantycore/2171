@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>2171</title>
+        <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
+        <script src="https://www.unpkg.com/markdown@0.5.0/lib/markdown.js"></script>
+        <script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+        <style>
+:root {
+    --header-height: 30px;
+}
+
+body {
+    margin: 0;
+    height: 100vh;
+}
+
+body.dark {
+    color: white;
+    background-color: black;
+}
+
+body.dark a:visited {
+    color: #aa30c0;
+}
+
+header {
+    background-color: #eee;
+    color: #666;
+    height: var(--header-height);
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 30px;
+    font-size: larger;
+}
+
+.dark header {
+    color: #aaa;
+    background-color: #111;
+}
+
+header a {
+    text-decoration: none;
+}
+
+.logo {
+    font-weight: bolder;    
+}
+
+main {
+    padding-top: var(--header-height);
+    display: flex;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    height: calc(100vh - var(--header-height));
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+main > section {
+    flex: 3;
+    margin: 0 20px;
+    overflow-y: auto;
+}
+
+main > section > nav {
+    float: right;
+    position: sticky;
+    top: 10px;
+    right: 10px;
+    background-color: white;
+    padding: 10px 15px;
+    border: 1px solid #eee;
+    border-radius: 10px;
+    z-index: 100;   
+    display: flex;
+    gap: 15px; 
+}
+
+.dark main > section > nav {
+    background-color: black;
+    border-color: #111;
+}
+
+main > section > article {
+    margin-top: 20px;
+    font-family: 'Times New Roman', Times, serif;
+}
+
+main > section > article img {
+    max-width: 100%;
+}
+
+textarea {
+    width: 100%;
+    height: 400px;
+}
+
+main > aside {
+    flex: 1;
+    overflow-y: auto;
+    font-size: smaller;
+}
+
+main > aside > ul, nav > ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+main > aside > ul > li {
+    margin-bottom: 10px;
+}
+
+main > aside .timestamp {
+    color: #666;
+}
+
+.dark main > aside .timestamp {
+    color: #aaa;
+}
+
+code {
+    white-space: pre;
+}
+
+        </style>
+    </head>
+    <body x-data="main()" x-bind:class="visualMode">
+        <header>
+            <div>
+                <a href="#" class="logo">2171</a>
+                <a href="" x-on:click.prevent="toggleVisualMode()" x-text="visualModeLabel[visualMode]"></a>
+            </div>
+            <template x-if="displayed !== getCurrentVersion()">
+                <a href="" x-on:click.prevent="displayCurrentVersion()">Go to the latest version of the page</a>
+            </template>
+            <template x-if="public === null && loginForm === 'hide'">
+                <span>
+                    <a href="" x-on:click.prevent="login()">login with Nostr</a>
+                    / <a href="" x-on:click.prevent="create()">create new Nostr identity</a>
+                </span>
+            </template>
+            <template x-if="public === null && loginForm === 'show'">
+                <div>Enter your private key in hex format (at your risk!)
+                    <input x-model="private"><button x-on:click="finishLogin()">Confirm</button>
+                </div>
+            </template>
+            <template x-if="public !== null">
+                <div>
+                    Logged in as pubkey <span x-text="public.slice(0, 8)"></span>
+                    <template x-if="private === null">
+                        <span>with NIP-07</span>
+                    </template>
+                    <template x-if="private !== null">
+                        <span> · <a href="" x-on:click.prevent="copyPrivKey()">Copy privkey</a></span>
+                    </template>
+                    / <a href="" x-on:click.prevent="copyPubKey()">Copy pubkey</a>
+                    · <a href="" x-on:click.prevent="logout()">Logout</a>
+                </div>
+            </template>
+        </header>
+        <main>
+            <template x-if="mode === 'wait'">
+                <section>
+                    <p>Loading &hellip;</p>
+                </section>
+            </template>
+            <template x-if="(eventList.length === 0 && mode !== 'wait') || mode === 'hidden'">
+                <section>
+                    <template x-if="subject !== ''">
+                        <h1 x-text="subject"></h1>
+                    </template>
+                    <p>
+                        This page does not exist yet (or all existing versions are hidden). You can create it.
+                    </p>
+                    <p>
+                        Caveat: sometimes seeing this form means that <strong>2171</strong> failed to load the page. Try reloading (Ctrl + R).
+                    </p>
+                    <p>
+                        <textarea x-model="source" style="width: 75%"></textarea>
+                    </p>
+                    <p>
+                        <button x-on:click="save()">Save</button>
+                    </p>
+                </section>
+            </template>
+            <template x-if="eventList.length > 0 && mode == 'view'">
+                <section>
+                    <nav>
+                        <button x-on:click="edit()">Edit</button>
+                        <template x-if="hidden[displayed]">
+                            <button x-on:click="show()">Restore</button>
+                        </template>
+                        <template x-if="!hidden[displayed]">
+                            <button x-on:click="hide()">Hide</button>
+                        </template>
+                    </nav>
+                    <template x-if="subject !== ''">
+                        <h1 x-text="subject"></h1>
+                    </template>
+                    <article x-html="rendered"></article>    
+                </section>  
+            </template>  
+            <template x-if="eventList.length > 0 && mode === 'edit'">
+                <section>
+                    <p>
+                        <textarea x-model="source"></textarea>
+                    </p>
+                    <p>
+                        <button x-on:click="save()">Save</button>
+                        <button x-on:click="cancel()">Cancel</button>
+                    </p>    
+                </section>
+            </template>
+            <template x-if="eventList.length > 0">
+                <aside>
+                    <h3>Recent edits</h3>
+                    <ul>
+                        <template x-for="event in getVisibleEvents()">
+                            <li>
+                                <a href="" x-on:click.prevent="setDisplayed(event.id)" x-text="event.id.slice(0, 8)"></a>
+                                by <span x-text="event.pubkey.slice(0, 8)"></span>
+                                <template x-if="hidden[event.id]"><span>👻&#xFE0E;</span></template>
+                                <br>
+                                <span class="timestamp" x-text="`@ ${new Date(event.created_at * 1000).toJSON()}`""></span> 
+                            </li>
+                        </template>
+                    </ul>    
+                </aside>
+            </template>
+        </main>
+
+        <script>
+
+console.log("Made by mantycore (438d2dad5fd0069f49be7eeb436b241557c5ad641ee3d63ee2c1f4a756c8ab9d / npub1gwxjmt2l6qrf7jd70m45x6eyz4tutttyrm3av0hzc862w4kg4wwsxdn5lm) with nostr-tools, alpine, gpt-4, and M4!> 571ll%")
+
+let hidden = localStorage.getItem('hiddenEvents')
+if (hidden === null) {
+    hidden = {}
+} else {
+    hidden = JSON.parse(hidden)
+}
+
+let private = localStorage.getItem('privKey')
+if (private !== null) {
+    public = window.NostrTools.getPublicKey(private)
+} else {
+    public = window.localStorage.getItem('pubKey')
+}
+
+let visualMode = localStorage.getItem('visualMode')
+if (visualMode === null) {
+    visualMode = "light"
+}
+
+const main = () => ({
+    visualMode: visualMode,
+    visualModeLabel: {dark: 'Light mode', light: 'Dark mode'}, // sic!
+    toggleVisualMode() {
+        if (this.visualMode === 'dark') {
+            this.visualMode = 'light'
+        } else {
+            this.visualMode = 'dark'
+        }
+        localStorage.setItem('visualMode', this.visualMode);
+    },
+    listening: false,
+    events: {},
+    eventList: [],
+    subject: null,
+    displayed: null,
+    sub: null,
+    mode: 'wait',
+    source: '',
+    rendered: '',
+    private: private,
+    public: public,
+    hidden: hidden,
+    loginForm: 'hide',
+    async login() {
+        if (window.nostr) {
+            this.public = await window.nostr.getPublicKey()
+            window.localStorage.setItem('pubKey', this.public)
+        } else {
+            this.loginForm = 'show'
+        }
+    },
+    async finishLogin() {
+        try {
+            this.public = window.NostrTools.getPublicKey(this.private)
+            window.localStorage.setItem('privKey', this.private)
+            window.localStorage.setItem('pubKey', this.public)
+        } catch {
+            //TODO
+        }
+        this.loginForm = 'hide'
+    },
+    async copyPrivKey() {
+        copyTextToClipboard(this.private)
+    },
+    async copyPubKey() {
+        copyTextToClipboard(this.public)
+    },
+    logout() {
+        this.private = null
+        this.public = null
+        window.localStorage.removeItem('privKey')
+        window.localStorage.removeItem('pubKey')
+    },
+    getVisibleEvents () {
+        return this.eventList.filter(event => !hidden[event])
+    },
+    hide() {
+        this.hidden[this.displayed] = true;
+        localStorage.setItem('hiddenEvents', JSON.stringify(hidden))
+        this.displayCurrentVersion();
+    },
+    show() {
+        delete this.hidden[this.displayed];
+        localStorage.setItem('hiddenEvents', JSON.stringify(hidden))
+    },
+    setDisplayed(id) {
+        this.mode = 'view'
+        this.displayed = id
+        this.source = this.events[id].content
+        this.rendered = window.markdown.toHTML(this.source)
+    },
+    processEvent(event, monitor = false) {
+        if (monitor) {
+            console.log(event)
+        }
+        this.events[event.id] = event
+        this.eventList = Object.values(this.events)
+        this.eventList.sort((a, b) => {
+            if (a.created_at > b.created_at) return -1
+            if (a.created_at < b.created_at) return 1
+            return 0
+        })
+    },
+    getCurrentVersion() {
+        const event = this.eventList.find(event => !this.hidden[event.id])
+        if (event === undefined) {
+            return null
+        } else {
+            return event.id
+        }
+    },
+    displayCurrentVersion() {
+        const event = this.eventList.find(event => !this.hidden[event.id])
+        if (event === undefined) {
+            this.mode = 'hidden'
+            this.displayed = null
+            this.source = ''
+            this.rendered = ''
+        } else {
+            this.setDisplayed(event.id)
+        }            
+    },
+    async init() {
+        if (!this.listening) {
+            window.addEventListener('hashchange', () => this.init())
+        }
+
+        const subject = this.subject = decodeURIComponent(window.location.hash.match(/#?(.*)/)[1])
+
+        this.events = {}
+        this.eventList = []
+        this.displayed = null
+        this.source = ''
+        this.rendered = ''
+
+        const request = {kinds: [2171], '#s': [subject]}
+
+        const now = Math.floor(Date.now() / 1000)
+        if (this.sub !== null) {
+            this.sub.unsub()
+        }
+        let sub = this.sub = pool.sub(relays, [{...request, since: now}])
+        sub.on('event', event => this.processEvent(event, true))
+
+        this.mode = 'wait'
+        const events = await pool.list(relays, [request])
+        for (const event of events) { this.processEvent(event) }
+
+        this.mode = 'view'
+        if (this.eventList.length > 0) {
+            this.displayCurrentVersion()
+        }
+    },
+    edit() {
+        this.mode = 'edit'
+    },
+    cancel() {
+        this.mode = 'view'
+    },
+    create() {
+        this.private = window.NostrTools.generatePrivateKey()
+        this.public = window.NostrTools.getPublicKey(this.private)
+    },
+    async save() {
+         let event = {
+            kind: 2171,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [['s', this.subject]],
+            content: this.source
+        }
+        if (window.nostr) {
+            event = await window.nostr.signEvent(event)
+        } else {
+            if (this.private === null) {
+                this.create()
+            }
+            event.pubkey = this.public
+            event.id = window.NostrTools.getEventHash(event)
+            event.sig = window.NostrTools.signEvent(event, this.private)
+        }
+    
+        this.processEvent(event)
+        const pubs = pool.publish(relays, event)
+        this.mode = 'wait'
+        pubs.on('ok', () => {
+            if (this.mode === 'wait') {
+                this.setDisplayed(event.id)
+            }
+            this.mode = 'view'
+        })
+    }
+})
+
+// https://stackoverflow.com/questions/400212/how-do-i-copy-to-the-clipboard-in-javascript
+function fallbackCopyTextToClipboard(text) {
+    var textArea = document.createElement("textarea");
+    textArea.value = text;
+
+    // Avoid scrolling to bottom
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+        var successful = document.execCommand('copy');
+        var msg = successful ? 'successful' : 'unsuccessful';
+        //console.log('Fallback: Copying text command was ' + msg);
+    } catch (err) {
+        //console.error('Fallback: Oops, unable to copy', err);
+    }
+
+    document.body.removeChild(textArea);
+}
+function copyTextToClipboard(text) {
+    if (!navigator.clipboard) {
+        fallbackCopyTextToClipboard(text);
+        return;
+    }
+    navigator.clipboard.writeText(text).then(function() {
+        //console.log('Async: Copying to clipboard was successful!');
+    }, function(err) {
+        //console.error('Async: Could not copy text: ', err);
+    });
+}
+
+const pool = new window.NostrTools.SimplePool()
+const relays = [
+    "wss://nostr-pub.wellorder.net",
+    "wss://relay.damus.io",
+    "wss://nostr1.tunnelsats.com",
+    "wss://relay.nostr.info",
+    "wss://nostr-relay.wlvs.space",
+    "wss://nostr.zebedee.cloud",
+    "wss://lbrygen.xyz",
+    "wss://nostr.8e23.net",
+    "wss://nostr.xmr.rocks",
+    "wss://xmr.usenostr.org",
+    "wss://relay.roli.social",
+    "wss://relay.nostr.ro",
+    "wss://nostr.swiss-enigma.ch",
+    "wss://relay.anoma.li"
+]
+
+        </script>
+    </body>
+</html>
